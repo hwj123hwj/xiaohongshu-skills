@@ -57,8 +57,7 @@ metadata:
 
 | 命令 | 功能 |
 |------|------|
-| `cli.py check-login` | 检查登录状态，返回推荐登录方式 |
-| `cli.py login` | 二维码登录（有界面环境） |
+| `cli.py check-login` | 检查登录状态 |
 | `cli.py send-code --phone <号码>` | 手机登录第一步：发送验证码 |
 | `cli.py verify-code --code <验证码>` | 手机登录第二步：提交验证码 |
 | `cli.py delete-cookies` | 清除 cookies（退出/切换账号） |
@@ -108,8 +107,10 @@ python scripts/chrome_launcher.py
 # 2. 检查登录状态
 python scripts/cli.py check-login
 
-# 3. 登录（如需要）
-python scripts/cli.py login
+# 3. 登录（如需要）：手机号+验证码
+python scripts/cli.py send-code --phone <手机号>
+# 收到验证码后：
+python scripts/cli.py verify-code --code <验证码>
 
 # 4. 搜索笔记
 python scripts/cli.py search-feeds --keyword "关键词"
