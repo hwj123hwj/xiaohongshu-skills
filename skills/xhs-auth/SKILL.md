@@ -1,7 +1,7 @@
 ---
 name: xhs-auth
 description: |
-  小红书认证管理技能。检查登录状态、登录（二维码或手机号）、多账号管理。
+  小红书认证管理技能。检查登录状态、登录（仅手机号+验证码方式）、多账号管理。
   当用户要求登录小红书、检查登录状态、切换账号时触发。
 version: 1.0.0
 metadata:
@@ -89,61 +89,9 @@ python scripts/cli.py check-login
 
 输出解读：
 - `"logged_in": true` → 已登录，可执行后续操作。
-- `"logged_in": false` + `"login_method": "qrcode"` → 有界面环境，走方式 A（二维码）。输出自动包含 `qrcode_image_url` 和 `qrcode_path`。
-- `"logged_in": false` + `"login_method": "both"` → 无界面服务器，输出自动包含二维码，**询问用户选方式 A（二维码）或方式 B（手机验证码）**。
+- `"logged_in": false` → 未登录，**直接走手机验证码登录流程**，不展示二维码，不询问用户选择方式。
 
-### 第二步：根据输出选择登录方式
-
-#### 方式 A：二维码登录（所有平台通用）
-
-> `check-login` 未登录时会自动返回二维码（`qrcode_image_url` + `qrcode_path`），无需单独调 `get-qrcode`。
-
-**第一步** — 从 `check-login` 返回的 JSON 取 `qrcode_image_url`，在回复中展示：
-
-```
-请使用小红书 App 扫描以下二维码登录：
-
-![小红书登录二维码]({qrcode_image_url})
-
-您也可以在手机浏览器中直接访问此链接完成登录：
-{qr_login_url}
-```
-
-> **展示规范（必须全部遵守）**：
-> 1. 展示二维码图片（`qrcode_image_url`）。
-> 2. 如果输出含 `qr_login_url`，**必须**同时展示该链接并提示用户"也可以在手机浏览器中直接访问此链接完成登录"。此链接是小红书官方登录地址（`xiaohongshu.com` 域名），既方便用户直接点击，也增加对二维码的信任感。
-> 3. **禁止**省略 `qr_login_url`，即使已展示了二维码图片。
-
-图片内嵌在对话窗口，用户可以扫码或直接访问链接登录。
-
-**第二步** — 等待登录完成（**服务器无头环境必须用后台模式**）：
-
-> **⚠️ 重要：在服务器无头环境（`login_method: "both"`）下，直接调用 `wait-login` 会因进程阻塞被 exec 超时机制 kill，导致登录失败。必须使用后台脚本。**
-
-**服务器无头环境（推荐）：后台模式**
-
-```bash
-# 获取飞书回调 Webhook URL（从 OpenClaw 配置中取，或使用 localhost 占位）
-bash scripts/wait_login_bg.sh "http://127.0.0.1:PORT/xhs-login-callback" 180
-```
-
-实际执行时，AI 应：
-1. 用 `exec(background=true)` 启动 `wait_login_bg.sh`，立即返回
-2. 告知用户"已在后台等待，扫码后会自动确认，无需额外操作"
-3. 通过轮询 `check-login` 确认登录状态（每隔 15 秒一次，共 3 次）
-
-**本地有界面环境（有 DISPLAY）：直接调用**
-
-```bash
-python scripts/cli.py wait-login --timeout 120
-```
-
-- 连接已有 Chrome tab，内部阻塞等待（最多 120 秒）。
-- 输出 `{"logged_in": true}` 则完成；超时则提示用户重新运行 `get-qrcode` 刷新二维码。
-
-> **二维码过期刷新**：如需单独刷新二维码（如超时后），可运行 `get-qrcode`，它仍作为独立命令保留。
-
-#### 方式 B：手机验证码登录（无界面服务器，分两步）
+### 第二步：手机验证码登录（唯一登录方式）
 
 **⚠️ 强制要求：必须先向用户确认手机号，即使上下文中已有手机号也不得跳过。**
 - 用户可能要登录不同账号，手机号可能已变更。
@@ -161,7 +109,6 @@ python scripts/cli.py send-code --phone <用户确认的手机号>
 - 自动填写手机号、勾选用户协议、点击"获取验证码"。
 - Chrome 页面保持打开，等待下一步。
 - 正常输出：`{"status": "code_sent", "message": "..."}`
-- **频率限制**：自动切换为二维码登录，输出含 `qrcode_image_url`。告知用户"验证码发送受限，已切换为二维码登录"，按方式 A 的展示规范展示二维码，然后运行 `wait-login`。
 
 **第二步** — 向用户询问验证码，然后提交登录：
 
