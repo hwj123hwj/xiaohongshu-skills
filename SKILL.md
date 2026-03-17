@@ -11,7 +11,6 @@ metadata:
         - python3
         - uv
     emoji: "\U0001F4D5"
-    homepage: https://github.com/xpzouying/xiaohongshu-skills
     os:
       - darwin
       - linux
