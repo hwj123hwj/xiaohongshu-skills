@@ -35,7 +35,7 @@ metadata:
 |--------|------|
 | `check-login` | 检查当前登录状态 |
 | `get-qrcode` | 获取二维码图片（非阻塞） |
-| `wait-login` | 等待扫码完成（阻塞） |
+| `wait-login [--timeout N] [--notify-url URL]` | 等待扫码完成（支持后台回调模式） |
 | `send-code --phone` | 发送手机验证码 |
 | `verify-code --code` | 提交验证码完成登录 |
 | `delete-cookies` | 退出登录并清除 cookies |
@@ -116,10 +116,26 @@ python scripts/cli.py check-login
 
 图片内嵌在对话窗口，用户可以扫码或直接访问链接登录。
 
-**第二步** — 等待登录完成（**单次调用，无需轮询**）：
+**第二步** — 等待登录完成（**服务器无头环境必须用后台模式**）：
+
+> **⚠️ 重要：在服务器无头环境（`login_method: "both"`）下，直接调用 `wait-login` 会因进程阻塞被 exec 超时机制 kill，导致登录失败。必须使用后台脚本。**
+
+**服务器无头环境（推荐）：后台模式**
 
 ```bash
-python scripts/cli.py wait-login
+# 获取飞书回调 Webhook URL（从 OpenClaw 配置中取，或使用 localhost 占位）
+bash scripts/wait_login_bg.sh "http://127.0.0.1:PORT/xhs-login-callback" 180
+```
+
+实际执行时，AI 应：
+1. 用 `exec(background=true)` 启动 `wait_login_bg.sh`，立即返回
+2. 告知用户"已在后台等待，扫码后会自动确认，无需额外操作"
+3. 通过轮询 `check-login` 确认登录状态（每隔 15 秒一次，共 3 次）
+
+**本地有界面环境（有 DISPLAY）：直接调用**
+
+```bash
+python scripts/cli.py wait-login --timeout 120
 ```
 
 - 连接已有 Chrome tab，内部阻塞等待（最多 120 秒）。

@@ -497,10 +497,29 @@ def cmd_get_qrcode(args: argparse.Namespace) -> None:
     _output(result)
 
 
+def _send_notify(url: str, payload: dict) -> None:
+    """向指定 URL 发送 JSON 回调通知（fire-and-forget，失败静默忽略）。"""
+    import urllib.request
+    try:
+        data = json.dumps(payload, ensure_ascii=False).encode()
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=10)
+        logger.info("回调通知已发送: %s", url)
+    except Exception as e:
+        logger.warning("回调通知失败（已忽略）: %s", e)
+
+
 def cmd_wait_login(args: argparse.Namespace) -> None:
     """等待扫码登录完成（配合 get-qrcode 使用）。
 
     连接已有 Chrome tab，内部轮询直到登录成功或超时，替代 Skill 层的多次 check-login 轮询。
+
+    支持 --notify-url：登录结果（成功或超时）后向该 URL POST JSON 通知，
+    适合服务器无头环境下配合 exec(background=true) 实现非阻塞登录。
     """
     from xhs.login import wait_for_login
 
@@ -510,13 +529,14 @@ def cmd_wait_login(args: argparse.Namespace) -> None:
         if success:
             _clear_login_tab(args.port)
             _update_account_nickname(args, page)
-        _output(
-            {
-                "logged_in": success,
-                "message": "登录成功" if success else "等待超时，请重新运行 get-qrcode 获取新二维码",
-            },
-            exit_code=0 if success else 2,
-        )
+        result = {
+            "logged_in": success,
+            "message": "登录成功" if success else "等待超时，请重新运行 get-qrcode 获取新二维码",
+        }
+        # 回调通知（服务器无头环境非阻塞登录使用）
+        if getattr(args, "notify_url", None):
+            _send_notify(args.notify_url, result)
+        _output(result, exit_code=0 if success else 2)
     finally:
         browser.close()
 
@@ -1070,6 +1090,11 @@ def build_parser() -> argparse.ArgumentParser:
     # wait-login（配合 get-qrcode，阻塞等待登录完成）
     sub = subparsers.add_parser("wait-login", help="等待扫码登录完成（配合 get-qrcode 使用）")
     sub.add_argument("--timeout", type=float, default=120.0, help="等待超时秒数 (default: 120)")
+    sub.add_argument(
+        "--notify-url",
+        default=None,
+        help="登录结果回调 URL（POST JSON），适合服务器无头环境 background 模式",
+    )
     sub.set_defaults(func=cmd_wait_login)
 
     # phone-login（单命令交互式）
